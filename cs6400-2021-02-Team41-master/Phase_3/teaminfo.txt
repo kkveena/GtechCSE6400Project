@@ -1,0 +1,259 @@
+Report1
+=======
+SUMMARY 
+SELECT trim(m.manufacturer_name) as manufacturer_name, COUNT(p.pID) as total_products, round(AVG(p.retail_price),2) as average_retail_price,   
+MAX(p.retail_price) as maximum_non_discounted_retail_price, MIN(p.retail_price) as minimum_non_discounted_retail_price  
+FROM Manufacturer as m JOIN Product as p ON   
+m.manufacturer_id = p.manufacturer_id   
+GROUP BY m.manufacturer_name   
+ORDER BY AVG(p.retail_price) DESC LIMIT 100; 
+
+DETAIL 1 
+SELECT m.manufacturer_name, COUNT(p.pID) as total_products, AVG(p.retail_price) as average_retail_price,   
+MAX(p.retail_price) as maximum_non_discounted_retail_price, MIN(p.retail_price) as minimum_non_discounted_retail_price  
+FROM Manufacturer as m JOIN Product as p ON   
+m.manufacturer_id = p.manufacturer_id   
+and trim(m.manufacturer_name) = '%s'
+ GROUP BY m.manufacturer_name; 
+
+DETAIL 2 
+SELECT p.pID  as product_id, p.product_name as product_name, group_concat(c.category_name) as categories, p.retail_price as retail_price  FROM Product AS p JOIN `CategoryProductXref` AS pt ON p.pID = pt.pID   
+JOIN Category as c on c.category_id = pt.category_id   
+JOIN Manufacturer as m ON m.manufacturer_id = p.manufacturer_id  
+and trim(m.manufacturer_name) = '%s'   
+GROUP BY p.pID   
+ORDER BY p.retail_price DESC;
+
+---
+Report2
+=======
+SELECT trim(c.category_name) AS category_name, COUNT(p.pID) AS total_products ,   
+AVG(p.retail_price) AS avg_retail_price, MAX(p.retail_price) AS max_retail_price,   
+MIN(p.retail_price) AS min_retail_price   
+FROM Category AS c LEFT JOIN CategoryProductXref AS ptc ON c.category_id = ptc.category_id   
+LEFT JOIN Product AS p ON ptc.pID = p.pID   
+GROUP BY c.category_name   
+ORDER BY c.category_name;  
+
+---
+Report3
+=======
+SELECT
+p.pID,
+p.product_name,
+p.retail_price,
+SUM(sa.quantity) AS total_items,
+SUM(case when sa.date_of_sales IS NOT NULL THEN sa.quantity else 0 end) AS discount_items,
+SUM(case when dpr.discount_price IS NULL THEN sa.quantity*p.retail_price ELSE
+sa.quantity*dpr.discount_price END) AS total_revenue,
+SUM(case when sa.date_of_sales IS NOT NULL THEN sa.quantity*.75*p.retail_price ELSE
+sa.quantity*p.retail_price END) AS predicted_revenue,
+SUM(case when dpr.discount_price IS NULL THEN sa.quantity*p.retail_price ELSE
+sa.quantity*dpr.discount_price END) -SUM(case when sa.date_of_sales IS NOT NULL THEN
+sa.quantity*.75*p.retail_price ELSE sa.quantity*p.retail_price END) AS diff_revenue
+FROM
+`Product` p
+JOIN
+`DiscountPriceProductxref` dp ON
+p.pID = dp.pID
+JOIN
+`CategoryProductXref` ptc ON
+p.pID = ptc.pID
+JOIN
+`Category` c ON
+ptc.category_id = c.category_id
+JOIN `DiscountPriceProductxref` dpp ON
+p.pid = dpp.pid  
+JOIN `DiscountPrice` dpr ON
+dpp.discountPriceID = dpr.discountPriceID
+JOIN
+`Sales` sa ON
+ptc.pID = sa.pID
+JOIN
+`SalesDate` sd ON
+sa.date_of_sales = sd.calender_date
+JOIN
+`GenericDate` gd ON
+sd.calender_date = gd.calender_date
+WHERE
+c.category_name = 'Couches and Sofas'
+GROUP BY
+1,
+2,
+3
+HAVING
+ABS(diff_revenue) > 5000
+ORDER BY
+diff_revenue DESC;
+
+---
+Report4
+=======
+SELECT
+st.store_number,
+st.street_address,
+st.city_name,
+st.state_name, 
+EXTRACT(YEAR
+FROM gd.calender_date) AS “year”,
+SUM(case when dpr.discount_price IS NULL THEN sa.quantity*p.retail_price ELSE
+sa.quantity*dpr.discount_price END) AS total_revenue
+FROM `Store` AS st
+JOIN `Sales` AS sa ON
+st.store_number = sa.store_number
+JOIN `discountpriceproductxref` dpp ON
+sa.pID = dpp.pID
+JOIN Product p ON 
+sa.pID = p.pID 
+JOIN `SalesDate` sd ON
+sa.date_of_sales = sd.calender_date
+JOIN `GenericDate` gd ON
+sd.calender_date = gd.calender_date
+JOIN `DiscountPrice` dpr ON
+dpp.discountPriceID = dpr.discountPriceID
+GROUP BY st.store_number, “year”
+ORDER BY “year” ASC, total_revenue DESC; 
+---
+Report5
+=======
+     select YEAR(s.date_of_sales) as yr,
+			sum(s.quantity) as yearly_total_quantity,
+			(sum(s.quantity)/365) as average_yearly_quantity,
+			sum( case 
+				when c.category_name like "%Outdoor%Furniture%" 
+					and MONTH(s.date_of_sales) = 2 
+					and DAY(s.date_of_sales) = 2 
+					then s.quantity
+			        else 0 
+				end )  as groundhog_day_quantity 
+			from Sales s, Category c, CategoryProductXref x
+			where s.pid = x.pid
+			and x.category_id = c.category_id
+			and c.category_name like "%Outdoor%Furniture%"   
+			group by YEAR(s.date_of_sales)
+                     
+---
+Report6
+=======
+
+select   a.category_name, ANY_VALUE(a.state_name)state_name, max( max_quantity_sold ) as max_quantity_sold  
+        		from 
+        		(select c.category_name, st.state_name, sum(sa.quantity) as max_quantity_sold
+        		from Store st, Sales sa, CategoryProductXref x, Category c 
+        		where st.store_number = sa.store_number
+        		and sa.pid = x.pid
+        		and x.category_id = c.category_id
+        		and month(sa.date_of_sales ) = 02
+        		and year(sa.date_of_sales ) = 2012
+        		group by c.category_name,st.state_name  ) a
+        		group by a.category_name
+				order by a.category_name
+                            
+---
+Report7
+=======
+
+•	small population:
+SELECT c.city_name AS cityName,
+       EXTRACT(YEAR FROM S.date_of_sales) AS yos,
+       SUM(S.total_sales) AS totalSales
+FROM Sales S
+    LEFT OUTER JOIN Store on Store.store_number = S.store_number
+    LEFT OUTER JOIN City C on C.city_name = Store.city_name and C.state_name = Store.state_name
+WHERE C.population < 3700000
+GROUP BY yos, C.city_name, c.population
+ORDER BY yos, c.population
+
+•	medium population:
+SELECT c.city_name AS cityName,
+       EXTRACT(YEAR FROM S.date_of_sales) AS yos,
+       SUM(S.total_sales) AS totalSales
+FROM Sales S
+    LEFT OUTER JOIN Store on Store.store_number = S.store_number
+    LEFT OUTER JOIN City C on C.city_name = Store.city_name and C.state_name = Store.state_name
+WHERE C.population >= 3700000 AND C.population < 6700000
+GROUP BY yos, C.city_name, c.population
+ORDER BY yos, c.population
+
+•	large population:
+SELECT c.city_name AS cityName,
+       EXTRACT(YEAR FROM S.date_of_sales) AS yos,
+       SUM(S.total_sales) AS totalSales
+FROM Sales S
+    LEFT OUTER JOIN Store on Store.store_number = S.store_number
+    LEFT OUTER JOIN City C on C.city_name = Store.city_name and C.state_name = Store.state_name
+WHERE C.population >= 6700000 AND C.population < 9000000
+GROUP BY yos, C.city_name, c.population
+ORDER BY yos, c.population
+
+•	extra large population:
+SELECT c.city_name AS cityName,
+       EXTRACT(YEAR FROM S.date_of_sales) AS yos,
+       SUM(S.total_sales) AS totalSales
+FROM Sales S
+    LEFT OUTER JOIN Store on Store.store_number = S.store_number
+    LEFT OUTER JOIN City C on C.city_name = Store.city_name and C.state_name = Store.state_name
+WHERE C.population >= 9000000
+GROUP BY yos, C.city_name, c.population
+ORDER BY yos, c.population
+
+---
+Report8
+=======
+SELECT
+  SubQuery.YEAR,
+  SubQuery.IS_SHOWCASE_STORE,
+  MIN(SubQuery.TOTAL_SALE) as MIN_SALES,
+  MAX(SubQuery.TOTAL_SALE) as MAX_SALES,
+  AVG(SubQuery.TOTAL_SALE) as AVG_SALES,
+  SUM(SubQuery.TOTAL_SALE) as SUM_OF_SALES
+FROM
+  (SELECT
+  LatestTotalSaleOfYear.STORE_NUMBER,
+  Store.is_showcasestore as IS_SHOWCASE_STORE,
+  LatestTotalSaleOfYear.YEAR,
+  LatestTotalSaleOfYear.LATEST_DAY_OF_YEAR,
+  LatestTotalSaleOfYear.TOTAL_SALE
+FROM
+  Store JOIN (
+    SELECT
+      store_number as STORE_NUMBER,
+      EXTRACT(YEAR FROM date_of_sales) as YEAR,
+      MAX(date_of_sales) AS LATEST_DAY_OF_YEAR,
+      MAX(total_sales) AS TOTAL_SALE
+    FROM SALES
+    GROUP BY YEAR, STORE_NUMBER
+  ) LatestTotalSaleOfYear
+  on Store.store_number = LatestTotalSaleOfYear.store_number
+  ORDER BY LatestTotalSaleOfYear.YEAR ASC) AS SubQuery
+GROUP BY SubQuery.YEAR, SubQuery.IS_SHOWCASE_STORE
+ORDER BY SubQuery.YEAR ASC;
+---
+Report9
+=======
+•	top five items:
+SELECT P.product_name AS productName,
+       P.pid AS productID,
+       SUM(Sales.quantity) AS allSales,
+       SUM(CASE WHEN S.is_showcasestore = 1 THEN Sales.quantity WHEN S.is_showcasestore = 0 THEN 0 END ) AS showcaseStoresSales,
+       SUM(Sales.quantity - CASE WHEN S.is_showcasestore = 1 THEN Sales.quantity WHEN S.is_showcasestore = 0 THEN 0 END) AS excessSalesByWillmartStores
+FROM Sales
+    JOIN Product P on P.pID = Sales.pid
+    JOIN Store S on S.store_number = Sales.store_number
+GROUP BY P.pid
+ORDER BY excessSalesByWillmartStores DESC, P.pID ASC
+LIMIT 5;
+
+•	bottom five items:
+SELECT P.product_name AS productName,
+       P.pid AS productID,
+       SUM(Sales.quantity) AS allSales,
+       SUM(CASE WHEN S.is_showcasestore = 1 THEN Sales.quantity WHEN S.is_showcasestore = 0 THEN 0 END ) AS showcaseStoresSales,
+       SUM(Sales.quantity - CASE WHEN S.is_showcasestore = 1 THEN Sales.quantity WHEN S.is_showcasestore = 0 THEN 0 END) AS excessSalesByWillmartStores
+FROM Sales
+         JOIN Product P on P.pID = Sales.pid
+         JOIN Store S on S.store_number = Sales.store_number
+GROUP BY P.pid
+ORDER BY excessSalesByWillmartStores DESC, P.pID DESC
+LIMIT 5;
+---

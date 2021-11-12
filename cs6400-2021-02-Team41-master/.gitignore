@@ -1,0 +1,7 @@
+**/.DS_Store
+Phase_3/webpack-app/node_modules/*
+Phase_3/webpack-app/dist/*
+Phase_3/webpack-app/package-lock.json
+Phase_3/webapp/target/*
+.idea/*
+Phase_3/webpack-app/.idea
